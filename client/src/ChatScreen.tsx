@@ -63,7 +63,9 @@ export default function ChatScreen({ user }: { user: User }) {
       });
       s.emit("history:general", (history: Message[]) => setMessages(history));
     })();
-    return () => s?.disconnect();
+    return () => {
+      s?.disconnect();
+    };
   }, [user]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -86,10 +88,10 @@ export default function ChatScreen({ user }: { user: User }) {
   async function saveProfile() {
     const token = await user.getIdToken();
     const displayName = nameInput.trim() || me?.displayName || "user";
-    const avatar = avatarInput.trim() || null;
+    const avatar = avatarInput.trim() || undefined;
     await api.updateMe(token, { displayName, avatar });
     socket?.emit("profile:update", displayName);
-    const updated = { ...(me as Profile), displayName, avatar };
+    const updated = { ...(me as Profile), displayName, avatar: avatar ?? null };
     setMe(updated); setUsers((list) => list.map((u) => u.uid === updated.uid ? updated : u));
     setShowProfile(false);
   }
