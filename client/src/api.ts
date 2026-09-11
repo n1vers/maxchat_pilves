@@ -1,4 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL as string;
+// Если VITE_API_URL не задан — считаем, что клиент отдаётся тем же сервером
+// (деплой одним web-сервисом), и обращаемся по тому же origin.
+const API_URL = (import.meta.env.VITE_API_URL as string) || "";
 
 async function request(path: string, token: string, options: RequestInit = {}) {
   const res = await fetch(`${API_URL}${path}`, {

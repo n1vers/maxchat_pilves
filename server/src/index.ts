@@ -1,4 +1,5 @@
 import "dotenv/config";
+import path from "path";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -9,15 +10,27 @@ import usersRouter from "./routes/users";
 import { setupSockets } from "./sockets";
 
 const app = express();
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*" }));
+// CLIENT_ORIGIN нужен только если клиент живёт на ДРУГОМ домене/сервисе.
+// При деплое одним сервисом (клиент отдаётся этим же сервером) можно не указывать.
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }));
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/users", usersRouter);
 
+// Отдаём собранный клиент (client/dist), если он есть рядом.
+// Так один Node-процесс обслуживает и API/сокеты, и статику фронтенда.
+const clientDist = path.join(__dirname, "../../client/dist");
+app.use(express.static(clientDist));
+app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => {
+  res.sendFile(path.join(clientDist, "index.html"), (err) => {
+    if (err) res.status(404).send("client/dist не найден — соберите клиент (npm run build)");
+  });
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: process.env.CLIENT_ORIGIN || "*" },
+  cors: { origin: process.env.CLIENT_ORIGIN || true, credentials: true },
 });
 
 // Redis-адаптер нужен, если на Render запущено несколько инстансов сервера —

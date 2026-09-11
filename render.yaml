@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: chat-server
+    name: chat-app
     runtime: node
-    rootDir: server
-    buildCommand: npm install && npm run build
+    rootDir: .
+    buildCommand: npm run build
     startCommand: npm start
     envVars:
       - key: FIREBASE_PROJECT_ID
@@ -13,18 +13,6 @@ services:
       - key: FIREBASE_PRIVATE_KEY
         sync: false
       - key: REDIS_URL
-        sync: false
-      - key: CLIENT_ORIGIN
-        sync: false
-
-  - type: web
-    name: chat-client
-    runtime: static
-    rootDir: client
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL
         sync: false
       - key: VITE_FIREBASE_API_KEY
         sync: false
