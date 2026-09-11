@@ -35,15 +35,26 @@ npm run dev
 ```
 Откройте http://localhost:5173
 
-## 4. Деплой на Render
+## 4. Деплой на Render — один web-сервис (проще, экономит бесплатные часы)
+Сервер сам отдаёт собранный клиент (`client/dist`) как статику, поэтому для
+бесплатного аккаунта достаточно ОДНОГО Web Service + одного Key Value (Redis).
+
 1. Залейте репозиторий на GitHub.
-2. В Render: New -> Blueprint -> укажите репозиторий с `render.yaml` в корне —
-   он создаст оба сервиса (`chat-server` и `chat-client`) автоматически.
-3. В настройках каждого сервиса (Environment) впишите реальные значения переменных
-   (они помечены `sync: false`, то есть их нужно вписать вручную в Dashboard).
-4. В `server`: `CLIENT_ORIGIN` = URL клиента (для CORS).
-   В `client`: `VITE_API_URL` = URL сервера.
-5. После первого деплоя обновите оба URL друг у друга и передеплойте (Manual Deploy).
+2. New -> Key Value -> план Free. Скопируйте Internal Redis URL.
+3. New -> Web Service -> ваш репозиторий. Root Directory: **оставьте пустым** (корень репо).
+   Build Command: `npm run build`. Start Command: `npm start`. Instance Type: Free.
+4. В Environment впишите: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`,
+   `FIREBASE_PRIVATE_KEY`, `REDIS_URL`, `VITE_FIREBASE_API_KEY`,
+   `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
+   `VITE_*` нужны на этапе сборки клиента — Render подставит их автоматически
+   при `npm run build`, т.к. это переменные того же сервиса.
+5. Деплой. Готовый URL (`https://xxx.onrender.com`) откроет и фронтенд, и API/сокеты —
+   `CLIENT_ORIGIN` и `VITE_API_URL` не нужны, всё на одном origin.
+
+### Вариант с двумя сервисами (если нужен отдельный CDN для фронта)
+Тогда используйте `server/render.yaml`-подобную схему из предыдущей версии: отдельный
+Web Service для `server/` и Static Site для `client/`, плюс `CLIENT_ORIGIN` /
+`VITE_API_URL` для связи между ними по CORS.
 
 ## Как это работает
 - **Регистрация/вход** — целиком на клиенте через Firebase Auth SDK. Сервер получает
