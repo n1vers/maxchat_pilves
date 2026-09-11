@@ -11,6 +11,7 @@ interface ChatMessage {
   fromName: string;
   text: string;
   ts: number;
+  replyTo?: { id: string; fromName: string; text: string } | null;
 }
 
 function dmKey(a: string, b: string) {
@@ -25,7 +26,8 @@ export function setupSockets(io: Server) {
       if (!token) return next(new Error("Нет токена"));
       const decoded = await auth.verifyIdToken(token);
       (socket as any).uid = decoded.uid;
-      (socket as any).name = decoded.name || decoded.email || decoded.uid;
+      const snap = await (await import("../firebaseAdmin")).db.collection("users").doc(decoded.uid).get();
+      (socket as any).name = snap.exists ? (snap.data()?.displayName || decoded.email || decoded.uid) : (decoded.email || decoded.uid);
       next();
     } catch (e) {
       next(new Error("Невалидный токен"));
@@ -39,6 +41,10 @@ export function setupSockets(io: Server) {
     socket.join("general");
     socket.join(`user:${uid}`);
 
+    socket.on("profile:update", (displayName: string) => {
+      if (typeof displayName === "string" && displayName.trim()) (socket as any).name = displayName.trim().slice(0, 30);
+    });
+
     // История общего чата
     socket.on("history:general", async (cb) => {
       const raw = await redis.lrange(GENERAL_KEY, -HISTORY_LIMIT, -1);
@@ -46,7 +52,9 @@ export function setupSockets(io: Server) {
     });
 
     // Сообщение в общий чат
-    socket.on("message:general", async (text: string) => {
+    socket.on("message:general", async (payload: string | { text: string; replyTo?: ChatMessage["replyTo"] }) => {
+      const text = typeof payload === "string" ? payload : payload?.text;
+      const replyTo = typeof payload === "string" ? null : payload?.replyTo || null;
       if (!text?.trim()) return;
       const msg: ChatMessage = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -54,6 +62,7 @@ export function setupSockets(io: Server) {
         fromName: name,
         text: text.trim(),
         ts: Date.now(),
+        replyTo,
       };
       await redis.rpush(GENERAL_KEY, JSON.stringify(msg));
       await redis.ltrim(GENERAL_KEY, -1000, -1); // храним последние 1000 сообщений
@@ -67,7 +76,7 @@ export function setupSockets(io: Server) {
     });
 
     // Личное сообщение
-    socket.on("message:dm", async ({ to, text }: { to: string; text: string }) => {
+    socket.on("message:dm", async ({ to, text, replyTo }: { to: string; text: string; replyTo?: ChatMessage["replyTo"] }) => {
       if (!text?.trim() || !to) return;
       const msg: ChatMessage = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -75,6 +84,7 @@ export function setupSockets(io: Server) {
         fromName: name,
         text: text.trim(),
         ts: Date.now(),
+        replyTo: replyTo || null,
       };
       const key = dmKey(uid, to);
       await redis.rpush(key, JSON.stringify(msg));
