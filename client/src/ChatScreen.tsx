@@ -96,6 +96,15 @@ export default function ChatScreen({ user }: { user: User }) {
       s.on("message:general", (msg: Message) => {
         if (activeChatRef.current === "general") setMessages((prev) => [...prev, msg]);
       });
+      s.on("message:deleted", ({ chat, id }: { chat: string; id: string }) => {
+        if (chat === "general") {
+          setMessages((prev) => prev.filter((m) => m.id !== id));
+        } else {
+          setDmCache((prev) => ({ ...prev, [chat]: (prev[chat] || []).filter((m) => m.id !== id) }));
+          if (activeChatRef.current === chat) setMessages((prev) => prev.filter((m) => m.id !== id));
+        }
+        setReplyTo((prev) => (prev?.id === id ? null : prev));
+      });
       s.on("message:dm", (msg: Message & { to: string }) => {
         const partner = msg.from === profile.uid ? msg.to : msg.from;
         setDmCache((prev) => ({ ...prev, [partner]: [...(prev[partner] || []), msg] }));
@@ -142,6 +151,13 @@ export default function ChatScreen({ user }: { user: User }) {
     if (activeChat === "general") socket.emit("message:general", payload);
     else socket.emit("message:dm", { to: activeChat, ...payload });
     setText(""); setReplyTo(null); setShowEmoji(false); clearMedia();
+  }
+
+  function deleteMessage(message: Message) {
+    if (message.from !== me?.uid || !socket) return;
+    if (!window.confirm("Удалить это сообщение?")) return;
+    if (activeChat === "general") socket.emit("message:delete:general", message.id);
+    else socket.emit("message:delete:dm", { to: activeChat, id: message.id });
   }
 
   async function saveProfile() {
@@ -220,7 +236,10 @@ export default function ChatScreen({ user }: { user: User }) {
                 <div className="message-meta"><button type="button" className="author author-btn" onClick={() => openUserProfile(m.from)}>{m.fromName}</button><span className="time">{formatTime(m.ts)}</span></div>
                 {m.media?.dataUrl && <img className="message-media" src={m.media.dataUrl} alt={m.media.name} />}
                 {m.text && <span className="text">{m.text}</span>}
-                <button className="reply-btn" title="Ответить" onClick={() => setReplyTo(m)}>↩</button>
+                <div className="message-actions">
+                  <button className="reply-btn" title="Ответить" onClick={() => setReplyTo(m)}>↩</button>
+                  {m.from === me?.uid && <button className="delete-btn" title="Удалить сообщение" onClick={() => deleteMessage(m)}>🗑️</button>}
+                </div>
               </div>
             </div>
           ))}

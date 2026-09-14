@@ -102,6 +102,29 @@ export function setupSockets(io: Server) {
       cb(await hydrateMessages(raw));
     });
 
+    socket.on("message:delete:general", async (messageId: string) => {
+      if (typeof messageId !== "string" || !messageId) return;
+      const raw = await redis.lrange(GENERAL_KEY, 0, -1);
+      let target: ChatMessage | null = null;
+      const kept: string[] = [];
+      for (const item of raw) {
+        try {
+          const msg = JSON.parse(item) as ChatMessage;
+          if (msg.id === messageId) {
+            if (msg.from !== uid) return;
+            target = msg;
+          } else kept.push(item);
+        } catch { kept.push(item); }
+      }
+      if (!target) return;
+      const tx = redis.multi();
+      tx.del(GENERAL_KEY);
+      if (kept.length) tx.rpush(GENERAL_KEY, ...kept);
+      if (target.media?.id) tx.del(mediaKey(target.media.id));
+      await tx.exec();
+      io.to("general").emit("message:deleted", { chat: "general", id: messageId });
+    });
+
     socket.on("message:general", async (payload: any) => {
       const text = typeof payload === "string" ? payload : payload?.text;
       const replyTo = typeof payload === "string" ? null : payload?.replyTo || null;
@@ -150,6 +173,31 @@ export function setupSockets(io: Server) {
       const hydrated = await hydrateMessage(msg);
       io.to(`user:${to}`).emit("message:dm", { ...hydrated, to });
       socket.emit("message:dm", { ...hydrated, to });
+    });
+
+    socket.on("message:delete:dm", async ({ to, id }: { to: string; id: string }) => {
+      if (!to || !id) return;
+      const key = dmKey(uid, to);
+      const raw = await redis.lrange(key, 0, -1);
+      let target: ChatMessage | null = null;
+      const kept: string[] = [];
+      for (const item of raw) {
+        try {
+          const msg = JSON.parse(item) as ChatMessage;
+          if (msg.id === id) {
+            if (msg.from !== uid) return;
+            target = msg;
+          } else kept.push(item);
+        } catch { kept.push(item); }
+      }
+      if (!target) return;
+      const tx = redis.multi();
+      tx.del(key);
+      if (kept.length) tx.rpush(key, ...kept);
+      if (target.media?.id) tx.del(mediaKey(target.media.id));
+      await tx.exec();
+      io.to(`user:${uid}`).emit("message:deleted", { chat: to, id });
+      io.to(`user:${to}`).emit("message:deleted", { chat: uid, id });
     });
 
     socket.on("conversations", async (cb) => {
