@@ -30,6 +30,7 @@ app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => {
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  maxHttpBufferSize: 8 * 1024 * 1024,
   cors: { origin: process.env.CLIENT_ORIGIN || true, credentials: true },
 });
 

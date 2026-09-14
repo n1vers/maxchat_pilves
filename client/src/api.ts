@@ -17,7 +17,7 @@ async function request(path: string, token: string, options: RequestInit = {}) {
 
 export const api = {
   getMe: (token: string) => request("/api/users/me", token),
-  updateMe: (token: string, data: { displayName?: string; avatar?: string }) =>
+  updateMe: (token: string, data: { displayName?: string; avatar?: string; about?: string }) =>
     request("/api/users/me", token, { method: "PATCH", body: JSON.stringify(data) }),
   listUsers: (token: string) => request("/api/users", token),
 };

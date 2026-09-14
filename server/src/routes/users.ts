@@ -15,6 +15,7 @@ router.get("/me", verifyToken, async (req: AuthedRequest, res) => {
       email: req.email,
       displayName: req.email?.split("@")[0] || "user",
       avatar: null,
+      about: "",
       createdAt: Date.now(),
     };
     await ref.set(profile);
@@ -23,12 +24,13 @@ router.get("/me", verifyToken, async (req: AuthedRequest, res) => {
   res.json(snap.data());
 });
 
-// Обновить профиль (имя, аватар)
+// Обновить профиль (имя, аватар, информация о себе)
 router.patch("/me", verifyToken, async (req: AuthedRequest, res) => {
-  const { displayName, avatar } = req.body;
+  const { displayName, avatar, about } = req.body;
   const updates: Record<string, unknown> = {};
   if (displayName) updates.displayName = displayName;
   if (avatar !== undefined) updates.avatar = avatar;
+  if (about !== undefined) updates.about = String(about).trim().slice(0, 500);
 
   await db.collection("users").doc(req.uid!).set(updates, { merge: true });
   res.json({ ok: true });
