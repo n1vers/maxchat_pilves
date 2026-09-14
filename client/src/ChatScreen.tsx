@@ -59,6 +59,7 @@ export default function ChatScreen({ user }: { user: User }) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [showThemes, setShowThemes] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("maxchat-theme") as Theme) || "midnight");
   const [nameInput, setNameInput] = useState("");
@@ -178,6 +179,20 @@ export default function ChatScreen({ user }: { user: User }) {
   }
 
   const partnerName = (uid: string) => users.find((u) => u.uid === uid)?.displayName || uid;
+
+  function openUserProfile(uid: string) {
+    if (uid === me?.uid) {
+      setShowProfile(true);
+      return;
+    }
+    const profile = users.find((u) => u.uid === uid);
+    if (profile) setSelectedProfile(profile);
+  }
+
+  function startPrivateMessage(profile: Profile) {
+    setSelectedProfile(null);
+    openChat(profile.uid);
+  }
   const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
@@ -202,7 +217,7 @@ export default function ChatScreen({ user }: { user: User }) {
             <div key={m.id} className={`message-row ${m.from === me?.uid ? "own" : ""}`}>
               <div className="message">
                 {m.replyTo && <div className="reply-preview"><b>{m.replyTo.fromName}</b><span>{m.replyTo.text || "Вложение"}</span></div>}
-                <div className="message-meta"><span className="author">{m.fromName}</span><span className="time">{formatTime(m.ts)}</span></div>
+                <div className="message-meta"><button type="button" className="author author-btn" onClick={() => openUserProfile(m.from)}>{m.fromName}</button><span className="time">{formatTime(m.ts)}</span></div>
                 {m.media?.dataUrl && <img className="message-media" src={m.media.dataUrl} alt={m.media.name} />}
                 {m.text && <span className="text">{m.text}</span>}
                 <button className="reply-btn" title="Ответить" onClick={() => setReplyTo(m)}>↩</button>
@@ -221,6 +236,22 @@ export default function ChatScreen({ user }: { user: User }) {
           <button className="send-btn" type="submit">➤</button>
         </form>
       </main>
+
+      {selectedProfile && <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setSelectedProfile(null)}>
+        <div className="modal user-profile-modal">
+          <div className="modal-head"><h2>Профиль пользователя</h2><button onClick={() => setSelectedProfile(null)}>×</button></div>
+          <div className="user-profile-avatar">
+            {selectedProfile.avatar ? <img src={selectedProfile.avatar} alt="avatar" /> : (selectedProfile.displayName?.[0] || "?").toUpperCase()}
+          </div>
+          <h2 className="user-profile-name">{selectedProfile.displayName}</h2>
+          <div className="user-profile-status">● online</div>
+          <div className="user-about">
+            <span>О себе</span>
+            <p>{selectedProfile.about?.trim() || "Пользователь пока ничего о себе не написал."}</p>
+          </div>
+          <button className="start-dm-btn" onClick={() => startPrivateMessage(selectedProfile)}>💬 Начать личный чат</button>
+        </div>
+      </div>}
 
       {showProfile && <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setShowProfile(false)}>
         <div className="modal profile-modal">
