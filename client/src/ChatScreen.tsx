@@ -52,6 +52,7 @@ export default function ChatScreen({ user }: { user: User }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [me, setMe] = useState<Profile | null>(null);
   const [users, setUsers] = useState<Profile[]>([]);
+  const [conversationIds, setConversationIds] = useState<string[]>([]);
   const [activeChat, setActiveChat] = useState<"general" | string>("general");
   const [messages, setMessages] = useState<Message[]>([]);
   const [dmCache, setDmCache] = useState<Record<string, Message[]>>({});
@@ -102,14 +103,17 @@ export default function ChatScreen({ user }: { user: User }) {
         } else {
           setDmCache((prev) => ({ ...prev, [chat]: (prev[chat] || []).filter((m) => m.id !== id) }));
           if (activeChatRef.current === chat) setMessages((prev) => prev.filter((m) => m.id !== id));
+          s?.emit("conversations", (ids: string[]) => setConversationIds(ids));
         }
         setReplyTo((prev) => (prev?.id === id ? null : prev));
       });
       s.on("message:dm", (msg: Message & { to: string }) => {
         const partner = msg.from === profile.uid ? msg.to : msg.from;
+        setConversationIds((prev) => prev.includes(partner) ? prev : [...prev, partner]);
         setDmCache((prev) => ({ ...prev, [partner]: [...(prev[partner] || []), msg] }));
         if (activeChatRef.current === partner) setMessages((prev) => [...prev, msg]);
       });
+      s.emit("conversations", (ids: string[]) => setConversationIds(ids));
       s.emit("history:general", (history: Message[]) => setMessages(history));
     })().catch((err) => console.error(err));
     return () => { if (s) s.disconnect(); };
@@ -222,7 +226,7 @@ export default function ChatScreen({ user }: { user: User }) {
         </div>
         <div className={`chat-item ${activeChat === "general" ? "active" : ""}`} onClick={() => openChat("general")}><span>🌐</span># Общий чат</div>
         <div className="chat-item-header">Личные сообщения</div>
-        {users.map((u) => <div key={u.uid} className={`chat-item ${activeChat === u.uid ? "active" : ""}`} onClick={() => openChat(u.uid)}><span className="mini-avatar">{u.avatar ? <img src={u.avatar} alt="" /> : u.displayName[0]?.toUpperCase()}</span>{u.displayName}</div>)}
+        {users.filter((u) => conversationIds.includes(u.uid)).map((u) => <div key={u.uid} className={`chat-item ${activeChat === u.uid ? "active" : ""}`} onClick={() => openChat(u.uid)}><span className="mini-avatar">{u.avatar ? <img src={u.avatar} alt="" /> : u.displayName[0]?.toUpperCase()}</span>{u.displayName}</div>)}
         <div className="sidebar-bottom"><button onClick={() => setShowThemes(!showThemes)}>🎨 Тема</button><button onClick={() => signOut(firebaseAuth)}>↪ Выйти</button>{showThemes && <div className="theme-menu">{(["midnight", "ocean", "forest", "light"] as Theme[]).map((t) => <button key={t} className={theme === t ? "selected" : ""} onClick={() => { setTheme(t); setShowThemes(false); }}>{t === "midnight" ? "🌙 Тёмная" : t === "ocean" ? "🌊 Ocean" : t === "forest" ? "🌲 Forest" : "☀️ Светлая"}</button>)}</div>}</div>
       </aside>
 

@@ -201,7 +201,14 @@ export function setupSockets(io: Server) {
     });
 
     socket.on("conversations", async (cb) => {
-      cb(await redis.smembers(`conv:${uid}`));
+      const conversationIds = await redis.smembers(`conv:${uid}`);
+      const activeConversationIds = await Promise.all(
+        conversationIds.map(async (partnerUid) => ({
+          partnerUid,
+          hasMessages: (await redis.llen(dmKey(uid, partnerUid))) > 0,
+        })),
+      );
+      cb(activeConversationIds.filter(({ hasMessages }) => hasMessages).map(({ partnerUid }) => partnerUid));
     });
   });
 }
