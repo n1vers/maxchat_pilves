@@ -6,6 +6,7 @@ const GENERAL_KEY = "chat:general";
 const HISTORY_LIMIT = 100;
 const MAX_MEDIA_BYTES = 6 * 1024 * 1024;
 const MEDIA_TTL_SECONDS = 60 * 60 * 24 * 30;
+const PRESENCE_KEY_PREFIX = "presence:";
 
 interface ChatMedia {
   id: string;
@@ -30,6 +31,10 @@ function dmKey(a: string, b: string) {
 
 function mediaKey(id: string) {
   return `media:${id}`;
+}
+
+function presenceKey(uid: string) {
+  return `${PRESENCE_KEY_PREFIX}${uid}`;
 }
 
 function validateMedia(media: any) {
@@ -90,6 +95,22 @@ export function setupSockets(io: Server) {
 
     socket.join("general");
     socket.join(`user:${uid}`);
+
+    void (async () => {
+      const key = presenceKey(uid);
+      const wasOnline = (await redis.scard(key)) > 0;
+      await redis.sadd(key, socket.id);
+      if (!wasOnline) io.emit("presence:update", { uid, online: true });
+    })();
+
+    socket.on("presence:list", async (cb) => {
+      const keys = await redis.keys(`${PRESENCE_KEY_PREFIX}*`);
+      const onlineIds = await Promise.all(keys.map(async (key) => ({
+        uid: key.slice(PRESENCE_KEY_PREFIX.length),
+        online: (await redis.scard(key)) > 0,
+      })));
+      cb(onlineIds.filter(({ online }) => online).map(({ uid: onlineUid }) => onlineUid));
+    });
 
     socket.on("profile:update", (displayName: string) => {
       if (typeof displayName === "string" && displayName.trim()) {
@@ -209,6 +230,15 @@ export function setupSockets(io: Server) {
         })),
       );
       cb(activeConversationIds.filter(({ hasMessages }) => hasMessages).map(({ partnerUid }) => partnerUid));
+    });
+
+    socket.on("disconnect", async () => {
+      const key = presenceKey(uid);
+      await redis.srem(key, socket.id);
+      if ((await redis.scard(key)) === 0) {
+        await redis.del(key);
+        io.emit("presence:update", { uid, online: false });
+      }
     });
   });
 }

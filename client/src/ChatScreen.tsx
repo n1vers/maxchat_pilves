@@ -34,6 +34,8 @@ interface Profile {
   about?: string;
 }
 
+type PresenceUpdate = { uid: string; online: boolean };
+
 type Theme = "midnight" | "ocean" | "forest" | "light";
 const API_URL = (import.meta.env.VITE_API_URL as string) || undefined;
 const emojis = ["😀", "😂", "😍", "😎", "😭", "😡", "🤔", "👍", "👎", "❤️", "🔥", "🎉", "💀", "🙏", "🚀", "💻", "👀", "✨"];
@@ -53,6 +55,7 @@ export default function ChatScreen({ user }: { user: User }) {
   const [me, setMe] = useState<Profile | null>(null);
   const [users, setUsers] = useState<Profile[]>([]);
   const [conversationIds, setConversationIds] = useState<string[]>([]);
+  const [onlineIds, setOnlineIds] = useState<string[]>([]);
   const [activeChat, setActiveChat] = useState<"general" | string>("general");
   const [messages, setMessages] = useState<Message[]>([]);
   const [dmCache, setDmCache] = useState<Record<string, Message[]>>({});
@@ -113,6 +116,12 @@ export default function ChatScreen({ user }: { user: User }) {
         setDmCache((prev) => ({ ...prev, [partner]: [...(prev[partner] || []), msg] }));
         if (activeChatRef.current === partner) setMessages((prev) => [...prev, msg]);
       });
+      s.on("presence:update", ({ uid, online }: PresenceUpdate) => {
+        setOnlineIds((prev) => online
+          ? (prev.includes(uid) ? prev : [...prev, uid])
+          : prev.filter((id) => id !== uid));
+      });
+      s.emit("presence:list", (ids: string[]) => setOnlineIds(ids));
       s.emit("conversations", (ids: string[]) => setConversationIds(ids));
       s.emit("history:general", (history: Message[]) => setMessages(history));
     })().catch((err) => console.error(err));
@@ -199,6 +208,7 @@ export default function ChatScreen({ user }: { user: User }) {
   }
 
   const partnerName = (uid: string) => users.find((u) => u.uid === uid)?.displayName || uid;
+  const isOnline = (uid: string) => uid === me?.uid || onlineIds.includes(uid);
 
   function openUserProfile(uid: string) {
     if (uid === me?.uid) {
@@ -221,17 +231,17 @@ export default function ChatScreen({ user }: { user: User }) {
         <div className="brand"><span>💬</span> MaxChat</div>
         <div className="profile-card">
           <div className="avatar">{me?.avatar ? <img src={me.avatar} alt="avatar" /> : (me?.displayName?.[0] || "?").toUpperCase()}</div>
-          <div className="profile-info"><b>{me?.displayName}</b><small>online</small></div>
+          <div className="profile-info"><b>{me?.displayName}</b><small>{me ? "online" : "offline"}</small></div>
           <button className="icon-btn" title="Профиль" onClick={() => setShowProfile(true)}>⚙️</button>
         </div>
         <div className={`chat-item ${activeChat === "general" ? "active" : ""}`} onClick={() => openChat("general")}><span>🌐</span># Общий чат</div>
         <div className="chat-item-header">Личные сообщения</div>
-        {users.filter((u) => conversationIds.includes(u.uid)).map((u) => <div key={u.uid} className={`chat-item ${activeChat === u.uid ? "active" : ""}`} onClick={() => openChat(u.uid)}><span className="mini-avatar">{u.avatar ? <img src={u.avatar} alt="" /> : u.displayName[0]?.toUpperCase()}</span>{u.displayName}</div>)}
+        {users.filter((u) => conversationIds.includes(u.uid)).map((u) => <div key={u.uid} className={`chat-item ${activeChat === u.uid ? "active" : ""}`} onClick={() => openChat(u.uid)}><span className="mini-avatar">{u.avatar ? <img src={u.avatar} alt="" /> : u.displayName[0]?.toUpperCase()}</span><span className="chat-name">{u.displayName}</span><span className={`presence-dot ${isOnline(u.uid) ? "online" : "offline"}`} title={isOnline(u.uid) ? "online" : "offline"} /></div>)}
         <div className="sidebar-bottom"><button onClick={() => setShowThemes(!showThemes)}>🎨 Тема</button><button onClick={() => signOut(firebaseAuth)}>↪ Выйти</button>{showThemes && <div className="theme-menu">{(["midnight", "ocean", "forest", "light"] as Theme[]).map((t) => <button key={t} className={theme === t ? "selected" : ""} onClick={() => { setTheme(t); setShowThemes(false); }}>{t === "midnight" ? "🌙 Тёмная" : t === "ocean" ? "🌊 Ocean" : t === "forest" ? "🌲 Forest" : "☀️ Светлая"}</button>)}</div>}</div>
       </aside>
 
       <main className="chat-main">
-        <header className="chat-header"><div><strong>{activeChat === "general" ? "Общий чат" : partnerName(activeChat)}</strong><small>{activeChat === "general" ? "Все участники" : "Личная переписка"}</small></div><span className="header-status">● online</span></header>
+        <header className="chat-header"><div><strong>{activeChat === "general" ? "Общий чат" : partnerName(activeChat)}</strong><small>{activeChat === "general" ? "Все участники" : "Личная переписка"}</small></div><span className={`header-status ${activeChat !== "general" && !isOnline(activeChat) ? "offline" : ""}`}>● {activeChat === "general" ? "online" : isOnline(activeChat) ? "online" : "offline"}</span></header>
         <div className="messages">
           {messages.map((m) => (
             <div key={m.id} className={`message-row ${m.from === me?.uid ? "own" : ""}`}>
@@ -267,7 +277,7 @@ export default function ChatScreen({ user }: { user: User }) {
             {selectedProfile.avatar ? <img src={selectedProfile.avatar} alt="avatar" /> : (selectedProfile.displayName?.[0] || "?").toUpperCase()}
           </div>
           <h2 className="user-profile-name">{selectedProfile.displayName}</h2>
-          <div className="user-profile-status">● online</div>
+          <div className={`user-profile-status ${!isOnline(selectedProfile.uid) ? "offline" : ""}`}>● {isOnline(selectedProfile.uid) ? "online" : "offline"}</div>
           <div className="user-about">
             <span>О себе</span>
             <p>{selectedProfile.about?.trim() || "Пользователь пока ничего о себе не написал."}</p>
